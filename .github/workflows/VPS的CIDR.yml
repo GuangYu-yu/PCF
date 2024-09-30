@@ -23,11 +23,14 @@ jobs:
       # 安装所需库
       - name: 安装所需库
         run: |
-          pip install requests  # 安装 requests 库
+          pip install requests geoip2  # 安装 requests 和 geoip2 库
 
       # 下载并处理文件
       - name: 下载并处理文件
-        run: python 获取VPS的CIDR.py  # 调用你的 Python 脚本
+        run: |
+          python 获取VPS的CIDR.py  # 调用你的 Python 脚本
+          ls -l  # 列出当前目录文件,检查GeoLite2-ASN.mmdb是否存在
+          file GeoLite2-ASN.mmdb  # 检查文件类型
 
       # 检查是否有更改
       - name: 检查是否有更改
