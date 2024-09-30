@@ -36,7 +36,7 @@ jobs:
       # 检查是否有更改
       - name: 检查是否有更改
         run: |
-          git add VPS_CIDR_4.txt VPS_CIDR_6.txt  # 将生成的CIDR文件添加到暂存区
+          git add .  # 将所有更改添加到暂存区
           if git diff --cached --quiet; then
             echo "没有需要提交的更改"
             exit 0
@@ -48,7 +48,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"  # 配置 Git 用户邮箱
           git config --local user.name "GitHub Action"  # 配置 Git 用户名
-          git commit -m "Updated VPS CIDR files on $(date '+%Y/%m/%d %H:%M:%S')" || echo "没有需要提交的更改，跳过提交。"  # 提交更改
+          git commit -m "Downloaded and processed files on $(date '+%Y/%m/%d %H:%M:%S')" || echo "没有需要提交的更改，跳过提交。"  # 提交更改
           git pull --rebase  # 拉取远程仓库最新的更改并合并
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git  # 设置远程仓库 URL
           git push || echo "没有需要推送的更改，跳过推送。"  # 推送更改到远程仓库
