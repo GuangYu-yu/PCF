@@ -2,12 +2,14 @@ import requests
 import geoip2.database
 import ipaddress
 import concurrent.futures
+import os
 
 def download_mmdb():
     url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
     response = requests.get(url)
     with open("GeoLite2-ASN.mmdb", "wb") as f:
         f.write(response.content)
+    print("GeoLite2-ASN.mmdb 下载完成")
 
 def get_asn_cidrs(asn):
     cidrs_v4 = []
@@ -43,6 +45,10 @@ def process_asn(asn):
 
 if __name__ == "__main__":
     download_mmdb()
+    
+    if not os.path.exists("GeoLite2-ASN.mmdb"):
+        print("错误: GeoLite2-ASN.mmdb 文件不存在")
+        exit(1)
 
     asn_list = ['90', '792', '793', '794', '1215', '1216', '1217', '1218', '1219', '1630', '3457', '4184', '4191', '4192', '6142', '7160', '10884', '11049', '11479', '11506', '11625', '11887', '13832', '14506', '14544', '14919', '15135', '15179', '15519', '18837', '18916', '20037', '20054', '22435', '23885', '24185', '25820', '29976', '31898', '31925', '33517', '34135', '34947', '36282', '37963', '38538', '39467', '40921', '41900', '43894', '43898', '45102', '45103', '45104', '46403', '46558', '52019', '54253', '57748', '59028', '59051', '59052', '59053', '59054', '59055', '60285', '63295', '134963', '136025', '138207', '200705', '200981', '203267', '206209', '211914', '393218', '393314', '393676', '393773', '395010', '395738', '399966', '400981', '401341']
 
