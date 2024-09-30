@@ -23,19 +23,20 @@ jobs:
       # 安装所需库
       - name: 安装所需库
         run: |
-          pip install requests geoip2  # 安装 requests 和 geoip2 库
+          pip install requests beautifulsoup4
 
       # 下载并处理文件
       - name: 下载并处理文件
         run: |
           python 获取VPS的CIDR.py  # 调用你的 Python 脚本
-          ls -l  # 列出当前目录文件,检查GeoLite2-ASN.mmdb是否存在
-          file GeoLite2-ASN.mmdb  # 检查文件类型
+          ls -l  # 列出当前目录文件，检查VPS_CIDR_4.txt和VPS_CIDR_6.txt是否生成
+          cat VPS_CIDR_4.txt  # 查看IPv4的CIDR文件内容
+          cat VPS_CIDR_6.txt  # 查看IPv6的CIDR文件内容
 
       # 检查是否有更改
       - name: 检查是否有更改
         run: |
-          git add .  # 将所有更改添加到暂存区
+          git add VPS_CIDR_4.txt VPS_CIDR_6.txt  # 将生成的CIDR文件添加到暂存区
           if git diff --cached --quiet; then
             echo "没有需要提交的更改"
             exit 0
@@ -47,7 +48,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"  # 配置 Git 用户邮箱
           git config --local user.name "GitHub Action"  # 配置 Git 用户名
-          git commit -m "Downloaded and processed files on $(date '+%Y/%m/%d %H:%M:%S')" || echo "没有需要提交的更改，跳过提交。"  # 提交更改
+          git commit -m "Updated VPS CIDR files on $(date '+%Y/%m/%d %H:%M:%S')" || echo "没有需要提交的更改，跳过提交。"  # 提交更改
           git pull --rebase  # 拉取远程仓库最新的更改并合并
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git  # 设置远程仓库 URL
           git push || echo "没有需要推送的更改，跳过推送。"  # 推送更改到远程仓库
