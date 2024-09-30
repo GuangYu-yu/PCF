@@ -92,12 +92,12 @@ ipv4_merged_sorted = process_networks_in_parallel(ipv4_networks)
 ipv6_merged_sorted = process_networks_in_parallel(ipv6_networks)
 
 # 将合并并排序后的 IPv4 结果写入文件
-with open('Clash/CloudflareCIDR.txt', 'w') as file:
+with open('VPS_CIDR_4.txt', 'w') as file:
     for ip in ipv4_merged_sorted:
         file.write(f"{ip}\n")
 
 # 将合并并排序后的 IPv6 结果写入文件
-with open('Clash/CloudflareCIDR-v6.txt', 'w') as file:
+with open('VPS_CIDR_6.txt', 'w') as file:
     for ip in ipv6_merged_sorted:
         file.write(f"{ip}\n")
 
