@@ -36,7 +36,7 @@ jobs:
       # 检查是否有更改
       - name: 检查是否有更改
         run: |
-          git add .  # 将所有更改添加到暂存区
+          git add VPS_CIDR_4.txt VPS_CIDR_6.txt
           if git diff --cached --quiet; then
             echo "没有需要提交的更改"
             exit 0
