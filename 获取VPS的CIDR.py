@@ -1,78 +1,91 @@
 import requests
-import geoip2.database
-import ipaddress
-import concurrent.futures
+from bs4 import BeautifulSoup
 import os
+import shutil
 
-def download_mmdb():
-    url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
-    response = requests.get(url)
-    with open("GeoLite2-ASN.mmdb", "wb") as f:
-        f.write(response.content)
-    print("GeoLite2-ASN.mmdb 下载完成")
-
-def get_asn_cidrs(asn):
-    cidrs_v4 = []
-    cidrs_v6 = []
-    with geoip2.database.Reader('GeoLite2-ASN.mmdb') as reader:
-        for ip_network in [ipaddress.IPv4Network('0.0.0.0/0'), ipaddress.IPv6Network('::/0')]:
-            for ip in ip_network:
-                try:
-                    response = reader.asn(ip)
-                    if response.autonomous_system_number == asn:
-                        network = ipaddress.ip_network(f"{ip}/128" if ip.version == 6 else f"{ip}/32")
-                        if ip.version == 4:
-                            cidrs_v4.append(network)
-                        else:
-                            cidrs_v6.append(network)
-                except geoip2.errors.AddressNotFoundError:
-                    pass
+# 函数：从指定的ASN页面获取CIDR（支持缓存）
+def get_cidrs(asn, cache_dir):
+    # 定义缓存文件路径
+    cache_file = os.path.join(cache_dir, f"{asn}_prefixes.html")
     
-    return merge_cidrs(cidrs_v4), merge_cidrs(cidrs_v6)
+    # 如果缓存文件不存在，下载网页并保存
+    if not os.path.exists(cache_file):
+        print(f"正在下载并缓存ASN {asn} 的prefixes网页...")
+        asn_url = f"https://bgp.he.net/{asn}#_prefixes"
+        response = requests.get(asn_url)
+        with open(cache_file, "w", encoding="utf-8") as file:
+            file.write(response.text)
+    else:
+        print(f"使用缓存的ASN {asn} 的prefixes网页...")
 
-def merge_cidrs(cidrs):
-    merged = []
-    for cidr in sorted(cidrs):
-        if not merged or not merged[-1].supernet_of(cidr):
-            merged.append(cidr)
-        else:
-            merged[-1] = merged[-1].supernet()
-    return merged
+    # 从缓存文件中读取内容
+    with open(cache_file, "r", encoding="utf-8") as file:
+        content = file.read()
 
-def process_asn(asn):
-    cidrs_v4, cidrs_v6 = get_asn_cidrs(int(asn))
-    return asn, cidrs_v4, cidrs_v6
+    # 解析HTML，提取CIDR信息
+    soup = BeautifulSoup(content, "html.parser")
+    cidrs = []
+    for row in soup.find_all('tr'):
+        cidr = row.find('a')
+        if cidr and '/net/' in cidr['href']:
+            cidrs.append(cidr.text)
+
+    return cidrs
+
+# 函数：从搜索页面提取ASN编号
+def get_asns(isp_name):
+    search_url = f"https://bgp.he.net/search?search%5Bsearch%5D={isp_name}&commit=Search"
+    response = requests.get(search_url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    asns = []
+    for row in soup.find_all('tr'):
+        asn_link = row.find('a')
+        if asn_link and 'AS' in asn_link.text:
+            asns.append(asn_link.text)
+    
+    return asns
+
+# 清空缓存目录
+def clear_cache(cache_dir):
+    if os.path.exists(cache_dir):
+        print(f"清空缓存目录 {cache_dir}...")
+        shutil.rmtree(cache_dir)
+    os.makedirs(cache_dir)
+
+# 函数：主流程，遍历ISP，获取ASN和CIDR并保存到两个txt文件
+def main(isps, cache_dir, output_ipv4_file, output_ipv6_file):
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
+    with open(output_ipv4_file, mode='w', encoding='utf-8') as ipv4_file, \
+         open(output_ipv6_file, mode='w', encoding='utf-8') as ipv6_file:
+        
+        for isp in isps:
+            print(f"正在搜索ISP: {isp}")
+            asns = get_asns(isp)
+            for asn in asns:
+                print(f"ASN: {asn}")
+                cidrs = get_cidrs(asn, cache_dir)
+                
+                # 保存到不同的txt文件
+                for cidr in cidrs:
+                    if ':' in cidr:  # 如果CIDR中有冒号，则是IPv6
+                        ipv6_file.write(f"{cidr}\n")
+                    else:  # 否则为IPv4
+                        ipv4_file.write(f"{cidr}\n")
+                    
+                print(f"{len(cidrs)} 个CIDR已保存至文件。")
+            print("-" * 40)
+    
+    # 清空缓存
+    clear_cache(cache_dir)
+
+# 输入ISP列表、缓存目录和输出文件路径
+isps_to_search = ["alibaba", "oracle", "it7"]  # 需要搜索的ISP
+cache_dir = "cache"  # 缓存目录
+output_ipv4_file = "VPS_CIDR_4.txt"  # 输出IPv4 CIDR的txt文件
+output_ipv6_file = "VPS_CIDR_6.txt"  # 输出IPv6 CIDR的txt文件
 
 if __name__ == "__main__":
-    download_mmdb()
-    
-    if not os.path.exists("GeoLite2-ASN.mmdb"):
-        print("错误: GeoLite2-ASN.mmdb 文件不存在")
-        exit(1)
-
-    asn_list = ['90', '792', '793', '794', '1215', '1216', '1217', '1218', '1219', '1630', '3457', '4184', '4191', '4192', '6142', '7160', '10884', '11049', '11479', '11506', '11625', '11887', '13832', '14506', '14544', '14919', '15135', '15179', '15519', '18837', '18916', '20037', '20054', '22435', '23885', '24185', '25820', '29976', '31898', '31925', '33517', '34135', '34947', '36282', '37963', '38538', '39467', '40921', '41900', '43894', '43898', '45102', '45103', '45104', '46403', '46558', '52019', '54253', '57748', '59028', '59051', '59052', '59053', '59054', '59055', '60285', '63295', '134963', '136025', '138207', '200705', '200981', '203267', '206209', '211914', '393218', '393314', '393676', '393773', '395010', '395738', '399966', '400981', '401341']
-
-    all_cidrs_v4 = []
-    all_cidrs_v6 = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_asn = {executor.submit(process_asn, asn): asn for asn in asn_list}
-        for future in concurrent.futures.as_completed(future_to_asn):
-            asn, cidrs_v4, cidrs_v6 = future.result()
-            all_cidrs_v4.extend(cidrs_v4)
-            all_cidrs_v6.extend(cidrs_v6)
-            print(f"已处理 ASN {asn}, 找到 {len(cidrs_v4)} 个 IPv4 CIDR 和 {len(cidrs_v6)} 个 IPv6 CIDR")
-
-    merged_cidrs_v4 = merge_cidrs(all_cidrs_v4)
-    merged_cidrs_v6 = merge_cidrs(all_cidrs_v6)
-
-    with open('VPS_CIDR_4.txt', 'w') as f:
-        for cidr in merged_cidrs_v4:
-            f.write(f"{cidr}\n")
-
-    with open('VPS_CIDR_6.txt', 'w') as f:
-        for cidr in merged_cidrs_v6:
-            f.write(f"{cidr}\n")
-
-    print(f"IPv4 结果已保存到 VPS_CIDR_4.txt, 共 {len(merged_cidrs_v4)} 个 CIDR")
-    print(f"IPv6 结果已保存到 VPS_CIDR_6.txt, 共 {len(merged_cidrs_v6)} 个 CIDR")
+    main(isps_to_search, cache_dir, output_ipv4_file, output_ipv6_file)
