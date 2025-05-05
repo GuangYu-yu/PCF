@@ -57,7 +57,7 @@ def clear_cache(cache_dir):
 # 合并和排序CIDR
 def merge_and_sort_cidrs(cidrs):
     if not cidrs:
-        return []
+        return {'ipv4': [], 'ipv6': []}
     
     # 将CIDR字符串转换为网络对象
     networks = []
@@ -71,12 +71,13 @@ def merge_and_sort_cidrs(cidrs):
             print(f"警告: 无法解析CIDR {cidr}: {e}")
             continue
     
-    # 按照起始地址排序
-    networks.sort()
-    
     # 分别处理IPv4和IPv6
     ipv4_networks = [n for n in networks if isinstance(n, ipaddress.IPv4Network)]
     ipv6_networks = [n for n in networks if isinstance(n, ipaddress.IPv6Network)]
+    
+    # 分别排序IPv4和IPv6网络
+    ipv4_networks.sort()
+    ipv6_networks.sort()
     
     # 合并网络
     def merge_networks(network_list):
