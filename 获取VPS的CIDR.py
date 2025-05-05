@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import shutil
+import ipaddress
 
 # 函数：从指定的ASN页面获取CIDR（支持缓存）
 def get_cidrs(asn, cache_dir):
@@ -53,30 +54,108 @@ def clear_cache(cache_dir):
         shutil.rmtree(cache_dir)
     os.makedirs(cache_dir)
 
+# 合并和排序CIDR
+def merge_and_sort_cidrs(cidrs):
+    if not cidrs:
+        return []
+    
+    # 将CIDR字符串转换为网络对象
+    networks = []
+    for cidr in cidrs:
+        try:
+            if ':' in cidr:  # IPv6
+                networks.append(ipaddress.IPv6Network(cidr))
+            else:  # IPv4
+                networks.append(ipaddress.IPv4Network(cidr))
+        except ValueError as e:
+            print(f"警告: 无法解析CIDR {cidr}: {e}")
+            continue
+    
+    # 按照起始地址排序
+    networks.sort()
+    
+    # 分别处理IPv4和IPv6
+    ipv4_networks = [n for n in networks if isinstance(n, ipaddress.IPv4Network)]
+    ipv6_networks = [n for n in networks if isinstance(n, ipaddress.IPv6Network)]
+    
+    # 合并网络
+    def merge_networks(network_list):
+        if not network_list:
+            return []
+            
+        merged = [network_list[0]]
+        for current in network_list[1:]:
+            last = merged[-1]
+            # 检查子网关系
+            if current.subnet_of(last):
+                continue
+            elif last.subnet_of(current):
+                merged[-1] = current
+            else:
+                try:
+                    # 尝试合并相邻网络
+                    supernet = last.supernet()
+                    if (current.network_address > last.network_address and 
+                        current.subnet_of(supernet) and last.subnet_of(supernet)):
+                        merged[-1] = supernet
+                    else:
+                        merged.append(current)
+                except (ValueError, AttributeError):
+                    merged.append(current)
+        return merged
+    
+    # 分别合并IPv4和IPv6网络
+    merged_ipv4 = merge_networks(ipv4_networks)
+    merged_ipv6 = merge_networks(ipv6_networks)
+    
+    # 转换回字符串并返回
+    return {
+        'ipv4': [str(network) for network in merged_ipv4],
+        'ipv6': [str(network) for network in merged_ipv6]
+    }
+
 # 函数：主流程，遍历ISP，获取ASN和CIDR并保存到两个txt文件
 def main(isps, cache_dir, output_ipv4_file, output_ipv6_file):
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
 
-    with open(output_ipv4_file, mode='w', encoding='utf-8') as ipv4_file, \
-         open(output_ipv6_file, mode='w', encoding='utf-8') as ipv6_file:
-        
-        for isp in isps:
-            print(f"正在搜索ISP: {isp}")
-            asns = get_asns(isp)
-            for asn in asns:
-                print(f"ASN: {asn}")
-                cidrs = get_cidrs(asn, cache_dir)
+    # 使用集合来存储所有CIDR，避免重复
+    ipv4_cidrs = set()
+    ipv6_cidrs = set()
+    
+    for isp in isps:
+        print(f"正在搜索ISP: {isp}")
+        asns = get_asns(isp)
+        for asn in asns:
+            print(f"ASN: {asn}")
+            cidrs = get_cidrs(asn, cache_dir)
+            
+            # 将CIDR添加到相应的集合中
+            for cidr in cidrs:
+                if ':' in cidr:  # 如果CIDR中有冒号，则是IPv6
+                    ipv6_cidrs.add(cidr)
+                else:  # 否则为IPv4
+                    ipv4_cidrs.add(cidr)
                 
-                # 保存到不同的txt文件
-                for cidr in cidrs:
-                    if ':' in cidr:  # 如果CIDR中有冒号，则是IPv6
-                        ipv6_file.write(f"{cidr}\n")
-                    else:  # 否则为IPv4
-                        ipv4_file.write(f"{cidr}\n")
-                    
-                print(f"{len(cidrs)} 个CIDR已保存至文件。")
-            print("-" * 40)
+            print(f"{len(cidrs)} 个CIDR已收集。")
+        print("-" * 40)
+    
+    # 合并和排序CIDR
+    print("正在合并和排序CIDR...")
+    all_cidrs = list(ipv4_cidrs) + list(ipv6_cidrs)
+    merged_results = merge_and_sort_cidrs(all_cidrs)
+    
+    # 保存到文件
+    with open(output_ipv4_file, mode='w', encoding='utf-8') as ipv4_file:
+        for cidr in merged_results['ipv4']:
+            ipv4_file.write(f"{cidr}\n")
+    
+    with open(output_ipv6_file, mode='w', encoding='utf-8') as ipv6_file:
+        for cidr in merged_results['ipv6']:
+            ipv6_file.write(f"{cidr}\n")
+    
+    print(f"已合并并排序 {len(merged_results['ipv4'])} 个IPv4 CIDR，保存至 {output_ipv4_file}")
+    print(f"已合并并排序 {len(merged_results['ipv6'])} 个IPv6 CIDR，保存至 {output_ipv6_file}")
     
     # 清空缓存
     clear_cache(cache_dir)
