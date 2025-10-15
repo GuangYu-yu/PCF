@@ -64,9 +64,9 @@ def merge_and_sort_cidrs(cidrs):
     for cidr in cidrs:
         try:
             if ':' in cidr:  # IPv6
-                networks.append(ipaddress.IPv6Network(cidr))
+                networks.append(ipaddress.IPv6Network(cidr, strict=False))
             else:  # IPv4
-                networks.append(ipaddress.IPv4Network(cidr))
+                networks.append(ipaddress.IPv4Network(cidr, strict=False))
         except ValueError as e:
             print(f"警告: 无法解析CIDR {cidr}: {e}")
             continue
@@ -79,35 +79,9 @@ def merge_and_sort_cidrs(cidrs):
     ipv4_networks.sort()
     ipv6_networks.sort()
     
-    # 合并网络
-    def merge_networks(network_list):
-        if not network_list:
-            return []
-            
-        merged = [network_list[0]]
-        for current in network_list[1:]:
-            last = merged[-1]
-            # 检查子网关系
-            if current.subnet_of(last):
-                continue
-            elif last.subnet_of(current):
-                merged[-1] = current
-            else:
-                try:
-                    # 尝试合并相邻网络
-                    supernet = last.supernet()
-                    if (current.network_address > last.network_address and 
-                        current.subnet_of(supernet) and last.subnet_of(supernet)):
-                        merged[-1] = supernet
-                    else:
-                        merged.append(current)
-                except (ValueError, AttributeError):
-                    merged.append(current)
-        return merged
-    
-    # 分别合并IPv4和IPv6网络
-    merged_ipv4 = merge_networks(ipv4_networks)
-    merged_ipv6 = merge_networks(ipv6_networks)
+    # 合并网络（保持地址覆盖等效）
+    merged_ipv4 = list(ipaddress.collapse_addresses(ipv4_networks))
+    merged_ipv6 = list(ipaddress.collapse_addresses(ipv6_networks))
     
     # 转换回字符串并返回
     return {
